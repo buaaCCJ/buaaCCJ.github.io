@@ -20,7 +20,12 @@
 <meta property="og:image" content="http://yoursite.com/assets/img/20191001202035.png">
 <meta property="og:image" content="http://yoursite.com/assets/img/controller.png">
 <meta property="og:image" content="http://yoursite.com/assets/img/controller2.png">
-<meta property="og:updated_time" content="2019-10-01T13:47:21.091Z">
+<meta property="og:image" content="http://yoursite.com/assets/img/boneTransform.png">
+<meta property="og:image" content="http://yoursite.com/assets/img/20191001223023.png">
+<meta property="og:image" content="http://yoursite.com/assets/img/20191001221824.png">
+<meta property="og:image" content="http://yoursite.com/assets/img/20191001222415.png">
+<meta property="og:image" content="http://yoursite.com/assets/img/20191001222159.png">
+<meta property="og:updated_time" content="2019-10-01T15:14:24.499Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="unreal中的捏脸系统">
 <meta name="twitter:description" content="《楚留香》《逆水寒》《天涯明月刀》等一批武侠游戏都将捏脸系统作为了标配，并且开放了大量的参数给玩家，从而能够自由的发挥自己的想象力，捏出一堆鬼脸~在知乎（《Honey Select》）以及其他文章里对捏脸的原理进行了详细的分析，本文呢，主要记录基于骨骼的捏脸在Unreal4中的实现。 原理基于调整骨骼进行捏脸的核心就是修改脸部骨骼的Scale、Rotation，Position，从而改变骨骼对应的">
@@ -186,9 +191,16 @@
       
         <p>《楚留香》《逆水寒》《天涯明月刀》等一批武侠游戏都将捏脸系统作为了标配，并且开放了大量的参数给玩家，从而能够自由的发挥自己的想象力，捏出一堆鬼脸~在知乎（《Honey Select》）以及其他文章里对捏脸的原理进行了详细的分析，本文呢，主要记录基于骨骼的捏脸在Unreal4中的实现。</p>
 <h2 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h2><p>基于调整骨骼进行捏脸的核心就是修改脸部骨骼的Scale、Rotation，Position，从而改变骨骼对应的蒙皮的顶点的位置，以达到捏脸的效果，</p>
-<p><img src="\assets\img/20191001201621.png" alt="20191001201621" style="zoom:50%;"> <img src="\assets\img\20191001201730.png" alt="20191001201730" style="zoom:50%;"></p>
-<p>上图是在动画蓝图里添加一个内置的改变骨骼的节点（下图）来修改鼻子的x坐标的scale 的效果：<br><img src="\assets\img\20191001202035.png" alt="20191001202035.png" style="zoom:50%;"></p>
-<p>看起来捏脸也就这么回事了！但是呢，要想达到游戏中千人千面的效果，基于骨骼的捏脸有以下几点要求：</p>
+<div align="center">
+<img src="\assets\img/20191001201621.png" alt="20191001201621" style="zoom:50%;" div align="center;"> <img src="\assets\img\20191001201730.png" alt="20191001201730" style="zoom:50%;" div align="center;/">
+</div>
+
+<p>上图是在动画蓝图里添加一个内置的改变骨骼的节点（下图）来修改鼻子的x坐标的scale 的效果：</p>
+<div align="center">
+<img src="\assets\img\20191001202035.png" alt="20191001202035.png" style="zoom:50%;">
+</div>
+看起来捏脸也就这么回事了！但是呢，要想达到游戏中千人千面的效果，基于骨骼的捏脸有以下几点要求：
+
 <ol>
 <li>需要设计一套有足够表达能力的骨骼以及细致的脸部蒙皮；</li>
 <li>大量的骨骼对应的大量参数带来的自由度过高，不易调节，应便于用户调节；</li>
@@ -197,24 +209,260 @@
 <li>如果有AI能力，根据用户提供的照片自动生成对应的模型是最好不过的了；</li>
 <li>有一套对应的妆容方案；</li>
 </ol>
-<p>其中 1 主要由3D建模师操作，另外对于脸部的对称部分，设计其对应的骨骼为对称骨骼，从而方便调节；对于第二条，大部分的游戏会设计一套叫做controller的第二层骨骼，每个controller同时操纵多根骨骼的多个参数的不同组合来调节局部区域，controller1控制眼部的整体的大小，需要添加眼部骨骼到controller控制的骨骼的列表中，controller的示意图如下:<br><img src="\assets\img\controller.png" alt="controller.png" style="zoom:50%;"><br>这样用户通过操纵controller的滑竿便可以一次性调节一个局部区域，实际上，通过二层骨骼我们降低了局部骨骼参数的自由度，从而方便用户精细的调整角色脸部的细节表情。举例：controller1通过控制三根骨骼的缩放参数来达到整体调节眼部大小的目的：<br><img src="\assets\img\controller2.png" alt="controller2.png" style="zoom:50%;"><br>3暂且按下不表；接下来4的话会涉及到如何在unreal里实现捏脸，因此会展开详细记录。</p>
-<h2 id="Unreal实现"><a href="#Unreal实现" class="headerlink" title="Unreal实现"></a>Unreal实现</h2><p>首先，开篇所述的直接用ModifyBone蓝图节点来修改每根骨骼的话，对于程序非常的不友好，为了捏脸的效果和充分的表达能力，SkeletalMesh中通常设置较多的骨骼，因此直接使用ModifyBone节点是不太方便的。<br>我们整体的逻辑应该是这样：</p>
+<p>其中 1 主要由3D建模师操作，另外对于脸部的对称部分，设计其对应的骨骼为对称骨骼，从而方便调节；对于第二条，大部分的游戏会设计一套叫做controller的第二层骨骼，每个controller同时操纵多根骨骼的多个参数的不同组合来调节局部区域，controller1控制眼部的整体的大小，需要添加眼部骨骼到controller控制的骨骼的列表中，controller的示意图如下:</p>
+<div align="center">
+<img src="\assets\img\controller.png" alt="controller.png" style="zoom:50%;">
+</div>
+这样用户通过操纵controller的滑竿便可以一次性调节一个局部区域，实际上，通过二层骨骼我们降低了局部骨骼参数的自由度，从而方便用户精细的调整角色脸部的细节表情。举例：controller1通过控制三根骨骼的缩放参数来达到整体调节眼部大小的目的：
+<div align="center">
+<img src="\assets\img\controller2.png" alt="controller2.png" style="zoom:50%;">
+</div>
+3暂且按下不表；接下来4的话会涉及到如何在unreal里实现捏脸，因此会展开详细记录。
+
+<h2 id="Unreal实现"><a href="#Unreal实现" class="headerlink" title="Unreal实现"></a>Unreal实现</h2><p>分为捏脸部分和与动画系统融合部分</p>
+<h3 id="捏脸部分"><a href="#捏脸部分" class="headerlink" title="捏脸部分"></a>捏脸部分</h3><p>首先，开篇所述的直接用ModifyBone蓝图节点来修改每根骨骼的话，对于程序非常的不友好，为了捏脸的效果和充分的表达能力，SkeletalMesh中通常设置较多的骨骼，因此直接使用ModifyBone节点是不太方便的。<br>我们整体的逻辑应该是这样：</p>
 <ol>
-<li><p>根据json文件解析出的controller生成所有的调节滑杆，并加载其默认值；</p>
+<li>根据json文件解析出的controller生成所有的调节滑杆，并加载其默认值；</li>
+<li>如果滑杆值发生变化，则对应线性插值或者样条插值该controller对应的所有的骨骼的对应的参数；</li>
+<li>然后将变化的相对Transform更新到骨架的transform上；</li>
+<li>Rendering。</li>
+</ol>
+<hr>
+<p>第一步和第二步实现比较简单，略去。对于第三步在Unreal中针对骨架有多套数据结构，从捏脸的方便性上来说，这里我们选择PoseableMesh来操作<br>，查看PoseableMeshComponent.h的源码，可以看到以下函数：</p>
+<pre><code>class ENGINE_API UPoseableMeshComponent : public USkinnedMeshComponent
+{
+GENERATED_UCLASS_BODY()
+
+/** Temporary array of local-space (ie relative to parent bone) rotation/translation/scale for each bone. */
+TArray&lt;FTransform&gt; BoneSpaceTransforms;
+
+UFUNCTION(BlueprintCallable, Category=&quot;Components|PoseableMesh&quot;)
+void SetBoneTransformByName(FName BoneName, const FTransform&amp; InTransform, EBoneSpaces::Type BoneSpace);
+
+UFUNCTION(BlueprintCallable, Category=&quot;Components|PoseableMesh&quot;) 
+FTransform GetBoneTransformByName(FName BoneName, EBoneSpaces::Type BoneSpace);
+
+UFUNCTION(BlueprintCallable, Category=&quot;Components|PoseableMesh&quot;)
+void ResetBoneTransformByName(FName BoneName);
+
+UFUNCTION(BlueprintCallable, Category=&quot;Components|PoseableMesh&quot;)
+void CopyPoseFromSkeletalComponent(const USkeletalMeshComponent* InComponentToCopy);
+};</code></pre><p>可以看到利用PoseableMesh我们可以方便的操纵Transform，从而达到捏脸的目的。下面放两张Demo的截图，左侧为直接调节单根骨骼，右侧为调节controller：</p>
+<div align="center">
+<img src="\assets\img\boneTransform.png" alt="boneTransform.png" style="zoom:50%; div align=center">
+<img src="\assets\img\20191001223023.png" alt="20191001223023.png" style="zoom:50%; div align=center">
+</div>
+
+<hr>
+<h3 id="与动画系统的融合"><a href="#与动画系统的融合" class="headerlink" title="与动画系统的融合"></a>与动画系统的融合</h3><p>PoseableMesh虽好，可不要贪杯哦（划掉），但是不支持动画，不支持Blendshape，换句话说，PoseableMesh就像专门的一套方便处理骨架transform的数据结构，其他的功能还是交由SkeletalMesh来做，那么问题就来了，如何将那捏脸的数据传到SkeletalMesh中，从而与动画以及BlendShape融合呢？这里我选择在AnimationBlueprint里实现一个自定义的AnimNode ModifyTransform来将PoseableMesh处理好的捏脸数据喂到SkeletalMesh的Render_Thread中，整个流程如下图所示:</p>
+<div align="center">
+<img src="\assets\img\20191001221824.png" alt="20191001221824.png" div align="center"">
+</div>
+
+<ol>
+<li><p>因为我们有两套mesh来处理不同的数据，因此在蓝图中我们选择挂载俩mesh，将其中的PoseableMesh设为不可见：</p>
+ <div align="center">
+ <img src="\assets\img\20191001222415.png" alt="20191001222415.png" style="zoom:50%; div align=center">
+ </div></li>
+<li><p>新建一个UAvatarAnimInstance继承自UAnimInstance，并添加以下数据：</p>
+ <pre>
+ UCLASS()
+ class AVATAR_UE4_API UAvatarAnimInstance : public UAnimInstance
+ {
+     GENERATED_BODY()
+     public:
+     UAvatarAnimInstance(const FObjectInitializer& ObjectInitializer);
+
+     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BoneTransform)
+     TArray<fvector> BonesTranslation;
+
+     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BoneTransform)
+     TArray<frotator> BonesRotation;
+
+     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BoneTransform)
+     TArray<fvector> BonesScale;
+
+     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BoneTransform)
+     TArray<fname> BonesName;
+ };
+ </fname></fvector></frotator></fvector></pre></li>
+<li><p>在计算完捏脸滑杆逻辑即将捏脸的transform更新到PoseableMesh后，添加并调用以下函数将数据传入到AnimInstance中：</p>
+<pre>
+void UAutoPinch::TransformBoneData2AnimInstance()
+{
+    if(Animation)
+    { 
+        for (int i = 0; i < Animation->BonesName.Num(); i++)
+        {
+            Animation->BonesTranslation[i] = PoseableMesh->GetBoneLocationByName(Animation->BonesName[i], EBoneSpaces::ComponentSpace);
+            Animation->BonesRotation[i] = PoseableMesh->GetBoneRotationByName(Animation->BonesName[i], EBoneSpaces::ComponentSpace);
+            Animation->BonesScale[i] = PoseableMesh->GetBoneScaleByName(Animation->BonesName[i], EBoneSpaces::ComponentSpace);
+        }
+    }
+}
+</pre></li>
+<li><p>创建一个蓝图类继承自UAvatarAnimInstance，并将其指定为第一步中的skeletalMesh的AnimClass中的动画蓝图的父类。</p>
 </li>
-<li><p>如果滑杆值发生变化，则对应线性插值或者样条插值该controller对应的所有的骨骼的对应的参数；</p>
+<li><p>接下来创建自定义动画蓝图节点，主要分为编辑器部分和runtime部分，编辑器部分的创建可参考其他文档，这里我们只记录如何创建自定义动画蓝图节点的runtime部分。</p>
 </li>
-<li><p>然后将变化的相对Transform更新到骨架的transform上；</p>
+<li><p>创建FAnimNode_ModifyTransform类继承自FAnimNode_SkeletalControlBase</p>
+ <pre>
+ USTRUCT()
+ struct AVATAR_UE4_API FAnimNode_ModifyTransform :public FAnimNode_SkeletalControlBase
+ {
+ GENERATED_USTRUCT_BODY()
+ public:
+
+ /*New Transform to use*/
+ UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Translation, meta = (PinShownByDefault))
+     FBonesTransfroms BonesTransfroms;
+
+ /** Whether and how to modify the translation of this bone. */
+ UPROPERTY(EditAnywhere, Category = Translation)
+     TEnumAsByte<ebonemodificationmode> TranslationMode;
+
+ /** Whether and how to modify the translation of this bone. */
+ UPROPERTY(EditAnywhere, Category = Rotation)
+     TEnumAsByte<ebonemodificationmode> RotationMode;
+
+ /** Whether and how to modify the translation of this bone. */
+ UPROPERTY(EditAnywhere, Category = Scale)
+     TEnumAsByte<ebonemodificationmode> ScaleMode;
+
+ /** Reference frame to apply Translation in. */
+ UPROPERTY(EditAnywhere, Category = Translation)
+     TEnumAsByte<enum ebonecontrolspace> TranslationSpace;
+
+ /** Reference frame to apply Rotation in. */
+ UPROPERTY(EditAnywhere, Category = Rotation)
+     TEnumAsByte<enum ebonecontrolspace> RotationSpace;
+
+ /** Reference frame to apply Scale in. */
+ UPROPERTY(EditAnywhere, Category = Scale)
+     TEnumAsByte<enum ebonecontrolspace> ScaleSpace;
+ FAnimNode_ModifyTransform();
+ //  // FAnimNode_Base interface  
+ virtual void GatherDebugData(FNodeDebugData& DebugData) override;
+ //  // End of FAnimNode_Base interface  
+
+     // FAnimNode_SkeletalControlBase interface  
+ virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<fbonetransform>& OutBoneTransforms) override;
+
+ bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
+ // End of FAnimNode_SkeletalControlBase interface  
+
+ private:
+ // FAnimNode_SkeletalControlBase interface  
+
+ virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+ // End of FAnimNode_SkeletalControlBase interface  
+
+ };
+ </fbonetransform></enum></enum></enum></ebonemodificationmode></ebonemodificationmode></ebonemodificationmode></pre>
 </li>
-<li><p>Rendering。<br>第一步和第二步实现比较简单，略去。对于第三步在Unreal中针对骨架有多套数据结构，从捏脸的方便性上来说，这里我们选择PoseableMesh来操作<br>，查看PoseableMeshComponent.h的源码，可以看到以下函数：</p>
-<p> class ENGINE_API UPoseableMeshComponent : public USkinnedMeshComponent<br> {<br> GENERATED_UCLASS_BODY()</p>
-<p> /** Temporary array of local-space (ie relative to parent bone) rotation/translation/scale for each bone. */<br> TArray<ftransform> BoneSpaceTransforms;</ftransform></p>
-<p> UFUNCTION(BlueprintCallable, Category=”Components|PoseableMesh”)<br> void SetBoneTransformByName(FName BoneName, const FTransform&amp; InTransform, EBoneSpaces::Type BoneSpace);</p>
-<p> UFUNCTION(BlueprintCallable, Category=”Components|PoseableMesh”)<br> FTransform GetBoneTransformByName(FName BoneName, EBoneSpaces::Type BoneSpace);</p>
-<p> UFUNCTION(BlueprintCallable, Category=”Components|PoseableMesh”)<br> void ResetBoneTransformByName(FName BoneName);</p>
-<p> UFUNCTION(BlueprintCallable, Category=”Components|PoseableMesh”)<br> void CopyPoseFromSkeletalComponent(const USkeletalMeshComponent* InComponentToCopy);<br> };<br>可以看到利用PoseableMesh我们可以方便的操纵Transform，从而达到捏脸的目的。</p>
+<li><p>因为自定义蓝图节点不支持TArray<xxx>做为输入，这里我们创建一个struct用来接收AnimInstance中传过来的数据：</xxx></p>
+<pre>
+USTRUCT(BlueprintType)
+struct FBonesTransfroms
+{
+GENERATED_BODY()
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BonesTransfroms")
+  TArray<fname> BonesName;
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BonesTransfroms")
+  TArray<fvector> BonesTranslation;
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BonesTransfroms")
+  TArray<fvector> BonesScale;
+  UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BonesTransfroms")
+  TArray<frotator> BonesRotation;
+};
+</frotator></fvector></fvector></fname></pre>
+</li>
+<li><p>然后实现FAnimNode_ModifyTransform中的虚函数，其中最重要的就是EvaluateSkeletalControl_AnyThread：</p>
+ <pre>
+ void FAnimNode_ModifyTransform::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext & Output, TArray<fbonetransform>& OutBoneTransforms)
+ {
+ check(OutBoneTransforms.Num() == 0);
+ // the way we apply transform is same as FMatrix or FTransform
+ // we apply scale first, and rotation, and translation
+ // if you'd like to translate first, you'll need two nodes that first node does translate and second nodes to rotate.
+ const FBoneContainer& RequiredBones = Output.AnimInstanceProxy->GetRequiredBones();
+ const FBoneContainer& BoneContainer = Output.Pose.GetPose().GetBoneContainer();
+ for (int i=0;i<bonestransfroms.bonesname.num();i++) { auto name="BonesTransfroms.BonesName[i];" fbonereference mybonetomodify(name); ret="MyBoneToModify.Initialize(RequiredBones);" fcompactposeboneindex compactposebonetomodify="MyBoneToModify.GetCompactPoseIndex(BoneContainer);" ftransform newbonetm="Output.Pose.GetComponentSpaceTransform(CompactPoseBoneToModify);" componenttransform="Output.AnimInstanceProxy-">GetComponentTransform();
+
+     FVector Scale = BonesTransfroms.BonesScale[i];
+     FVector Translation = BonesTransfroms.BonesTranslation[i];
+     FQuat Rotation(BonesTransfroms.BonesRotation[i]);
+
+     if (ScaleMode != BMM_Ignore)
+     {
+         // Convert to Bone Space.
+         FAnimationRuntime::ConvertCSTransformToBoneSpace(ComponentTransform, Output.Pose, NewBoneTM, CompactPoseBoneToModify, ScaleSpace);
+
+         if (ScaleMode == BMM_Additive)
+         {
+             NewBoneTM.SetScale3D(NewBoneTM.GetScale3D() * Scale);
+         }
+         else
+         {
+             NewBoneTM.SetScale3D(Scale);
+         }
+
+         // Convert back to Component Space.
+         FAnimationRuntime::ConvertBoneSpaceTransformToCS(ComponentTransform, Output.Pose, NewBoneTM, CompactPoseBoneToModify, ScaleSpace);
+     }
+     if (RotationMode != BMM_Ignore)
+     {
+         // Convert to Bone Space.
+         FAnimationRuntime::ConvertCSTransformToBoneSpace(ComponentTransform, Output.Pose, NewBoneTM, CompactPoseBoneToModify, RotationSpace);
+
+         const FQuat BoneQuat(Rotation);
+         if (RotationMode == BMM_Additive)
+         {
+             NewBoneTM.SetRotation(BoneQuat * NewBoneTM.GetRotation());
+         }
+         else
+         {
+             NewBoneTM.SetRotation(BoneQuat);
+         }
+
+         // Convert back to Component Space.
+         FAnimationRuntime::ConvertBoneSpaceTransformToCS(ComponentTransform, Output.Pose, NewBoneTM, CompactPoseBoneToModify, RotationSpace);
+     }
+     if (TranslationMode != BMM_Ignore)
+     {
+         // Convert to Bone Space.
+         FAnimationRuntime::ConvertCSTransformToBoneSpace(ComponentTransform, Output.Pose, NewBoneTM, CompactPoseBoneToModify, TranslationSpace);
+
+         if (TranslationMode == BMM_Additive)
+         {
+             NewBoneTM.AddToTranslation(Translation);
+         }
+         else
+         {
+             NewBoneTM.SetTranslation(Translation);
+         }
+
+         // Convert back to Component Space.
+         FAnimationRuntime::ConvertBoneSpaceTransformToCS(ComponentTransform, Output.Pose, NewBoneTM, CompactPoseBoneToModify, TranslationSpace);
+     }
+
+     OutBoneTransforms.Add(FBoneTransform(MyBoneToModify.GetCompactPoseIndex(BoneContainer), NewBoneTM));
+ }
+ }
+ </bonestransfroms.bonesname.num();i++)></fbonetransform></pre>
+</li>
+<li><p>最后在skeletalMesh的动画蓝图中添加以下节点：</p>
+  <div align="center">
+ <img src="\assets\img\20191001222159.png" alt="20191001222159.png" div align="center"；">
+ </div>
+这样整个数据流就跑通了，从捏脸的数据到最后的rendering。
+
+
 </li>
 </ol>
+<hr>
+<p> AI捏脸敬请关注我司SENSEAVATAR产品，接下来就是妆容系统，期待下一篇文章。</p>
+<hr>
 
       
 
