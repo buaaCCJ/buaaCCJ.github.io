@@ -181,7 +181,7 @@
       
         <p>《楚留香》《逆水寒》《天涯明月刀》等一批武侠游戏都将捏脸系统作为了标配，并且开放了大量的参数给玩家，从而能够自由的发挥自己的想象力，捏出一堆鬼脸~在知乎（《Honey Select》）以及其他文章里对捏脸的原理进行了详细的分析，本文呢，主要记录基于骨骼的捏脸在Unreal4中的实现。</p>
 <p>基于调整骨骼进行捏脸的核心就是修改脸部骨骼的Scale、Rotation，Position，从而改变骨骼对应的蒙皮的顶点的位置，以达到捏脸的效果，</p>
-<p><img src="https://github.com/buaaCCJ/buaaCCJ.github.io/tree/master/assets/img/20191001201621.png" alt="20191001201621" style="zoom:50%;"> <img src="\assets\img\\20191001201730.png" alt="20191001201730" style="zoom:50%;"></p>
+<p><img src="\assets\img/20191001201621.png" alt="20191001201621" style="zoom:50%;"> <img src="\assets\img\20191001201730.png" alt="20191001201730" style="zoom:50%;"></p>
 <p>上图是在动画蓝图里添加一个内置的改变骨骼的节点（下图）来修改鼻子的x坐标的scale 的效果：</p>
 <p><img src="%5Cassets%5Cimg%5C20191001202035.png" alt="20191001202035"></p>
 <p>看起来捏脸也就这么回事了！但是呢，要想达到游戏中千人千面的效果，基于骨骼的捏脸有以下几点要求：</p>
